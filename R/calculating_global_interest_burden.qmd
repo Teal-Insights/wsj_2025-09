@@ -1,0 +1,113 @@
+---
+title: "World Governments Net Interest Payments Calculation"
+author: "Teal Emery"
+format: html
+---
+
+```{r}
+library(tidyverse)
+library(imfweo)
+library(econid)
+```
+
+
+```{r}
+weo_series <- weo_get_series()
+
+weo_series
+```
+
+
+```{r}
+relevant_series <- c(
+  "NGDPD", # GDP in USD
+  "GGXCNL_NGDP", # Fiscal Balance % GDP
+  "GGXONLB_NGDP" # Primary Fiscal Balance % GDP
+)
+
+weo_series |> 
+  filter(series_id %in% relevant_series)
+```
+
+
+```{r}
+weo_2025_spring <- weo_get(
+  year = 2025,
+  release = "Spring"
+)
+
+weo_2025_spring
+```
+
+```{r}
+net_interest_ingredients <- weo_2025_spring |> 
+  filter(series_id %in% relevant_series)
+
+net_interest_ingredients
+```
+
+
+
+
+```{r}
+economy_or_aggregate <- net_interest_ingredients |> 
+  select(weo_name = entity_name) |> 
+  unique() |> 
+  standardize_entity(
+    weo_name,
+    output_cols = "entity_type"
+  ) |> 
+  mutate(
+    entity_type = case_when(
+      weo_name == "Kosovo" ~ "economy",
+      is.na(entity_type) ~ "aggregate",
+      .default = entity_type
+    ),
+  ) |> 
+  rename(entity_name = weo_name)
+
+economy_or_aggregate
+```
+
+These should all be aggregates
+```{r}
+economy_or_aggregate |> 
+  filter(entity_type == "aggregate")
+```
+These should all be economies (countries, territories -- the component parts of the whole world). And they are.
+
+```{r}
+economy_or_aggregate |> 
+  filter(entity_type == "economy")
+```
+
+
+```{r}
+economy_or_aggregate |> 
+  filter(!is.na(entity_type)) |> 
+```
+
+
+```{r}
+data_availability_check <- net_interest_ingredients |> 
+  left_join(
+    economy_or_aggregate,
+    by = join_by(entity_name)
+    ) |> 
+  group_by(series_name, entity_name, entity_type) |>
+  summarize(
+    first_year = first(year),
+    last_year = last(year),
+    n = n()
+  ) |> 
+  ungroup()
+
+data_availability_check
+```
+
+You can get World GDP, but you can't get the fiscal data, so you have to aggregate it from the component parts.
+```{r}
+data_availability_check |> 
+  filter(entity_name == "World")
+```
+
